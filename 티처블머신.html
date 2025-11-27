@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8"/>
+<title>AI 객체 인식 — 빠른 로딩 버전</title>
+<style>
+  body{background:#f7f9ff;font-family:Arial,Helvetica,sans-serif;padding:28px;text-align:center;}
+  .card{width:460px;margin:0 auto;background:#fff;padding:20px;border-radius:12px;box-shadow:0 6px 18px rgba(20,30,70,0.08);}
+  h1{margin:0;font-size:22px;color:#24324a}
+  .controls{margin-top:12px}
+  button{background:#4b6df6;color:#fff;border:none;padding:10px 14px;border-radius:8px;margin:6px;cursor:pointer}
+  #webcam-container, #preview-img{margin-top:16px}
+  #label-container div{font-weight:700;margin:6px;padding:8px;border-radius:8px;background:#eef2ff}
+  #status{margin-top:12px;color:#2b3a55;font-weight:600}
+  .spinner{display:inline-block;width:20px;height:20px;border:3px solid rgba(0,0,0,0.08);border-top-color:#4b6df6;border-radius:50%;animation:spin 1s linear infinite;vertical-align:middle;margin-right:8px}
+  @keyframes spin{to{transform:rotate(360deg)}}
+</style>
+</head>
+<body>
+  <div class="card">
+    <h1>AI 객체 인식 (리모컨 / 버즈 / 보조배터리)</h1>
+
+    <div class="controls">
+      <button id="btn-start">📸 웹캠 시작</button>
+      <button id="btn-upload">🖼 이미지 업로드</button>
+      <input type="file" id="imgFile" accept="image/*" style="display:none">
+    </div>
+
+    <div id="status">준비됨</div>
+
+    <div id="webcam-container"></div>
+    <img id="preview-img" style="width:280px;border-radius:8px;display:none" />
+
+    <div id="label-container"></div>
+  </div>
+
+<script>
+/*
+  개선 포인트:
+  - 라이브러리( tf + tmImage )는 사용자가 액션할 때만 동적으로 불러옴 (지연로딩)
+  - 모델은 한 번만 로드하고 재사용
+  - webcam 해상도를 낮추고 에러핸들링 추가
+*/
+
+const TM_URL = "https://teachablemachine.withgoogle.com/models/YCegcUTGC/";
+let model = null;
+let tmImageLibLoaded = false;
+let webcam = null;
+let maxPredictions = 0;
+const statusEl = document.getElementById('status');
+const labelContainer = document.getElementById('label-container');
+
+function setStatus(text, busy=false){
+  statusEl.innerHTML = (busy? '<span class="spinner"></span>' : '') + text;
+}
+
+// 동적으로 스크립트 불러오기 (Promise)
+function loadScript(src){
+  return new Promise((resolve, reject) => {
+    // 이미 로드된 경우
+    if(document.querySelector(`script[src="${src}"]`)) return resolve();
+    const s = document.createElement('script');
+    s.src = src;
+    s.onload = () => resolve();
+    s.onerror = (e) => reject(new Error('스크립트 로드 실패: ' + src));
+    document.head.appendChild(s);
+  });
+}
+
+// tmImage 라이브러리와 tfjs 지연로드
+async function ensureTmImageLoaded(){
+  if(tmImageLibLoaded) return;
+  setStatus('라이브러리 로드 중...', true);
+
+  try{
+    // 구체적 버전으로 고정하면 불필요한 최신 버전 체크를 피할 수 있음
+    await loadScript('https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.11.0/dist/tf.min.js');
+    await loadScript('https://cdn.jsdelivr.net/npm/@teachablemachine/image@0.8.4/dist/teachablemachine-image.min.js');
+    tmImageLibLoaded = true;
+    setStatus('라이브러리 로드 완료. 모델 준비 필요.');
+  }catch(err){
+    console.error(err);
+    setStatus('라이브러리 로드 실패 — 콘솔 확인', false);
+    throw err;
+  }
+}
+
+// 모델 로드 (한 번만)
+async function loadModelIfNeeded(){
+  if(model) return;
+  setStatus('모델 로드 중...', true);
+  try{
+    const modelURL = TM_URL + 'model.json';
+    const metadataURL = TM_URL + 'metadata.json';
+    model = await window.tmImage.load(modelURL, metadataURL);
+    maxPredictions = model.getTotalClasses();
+    setStatus('모델 로드 완료. 웹캠/업로드로 테스트하세요.');
+  }catch(err){
+    console.error(err);
+    setStatus('모델 로드 실패 — 네트워크/URL 확인', false);
+    throw err;
+  }
+}
+
+// 웹캠 시작 (해상도 낮춤 -> 속도 향상)
+async function startWebcam(){
+  try{
+    await ensureTmImageLoaded();
+    await loadModelIfNeeded();
+
+    // 준비된 라벨 UI 초기화
+    labelContainer.innerHTML = '';
+    for(let i=0;i<maxPredictions;i++) labelContainer.appendChild(document.createElement('div'));
+
+    const flip = true;
+    // 해상도 낮게: 224x224 (빠름)
+    webcam = new window.tmImage.Webcam(224, 224, flip);
+    await webcam.setup(); // 권한 요청
+    await webcam.play();
+    document.getElementById('webcam-container').innerHTML = '';
+    document.getElementById('webcam-container').appendChild(webcam.canvas);
+    document.getElementById('preview-img').style.display = 'none';
+    setStatus('웹캠 실행 중 — 모델 예측 중...', true);
+    window.requestAnimationFrame(webcamLoop);
+  }catch(err){
+    console.error(err);
+    setStatus('웹캠 시작 실패 — 콘솔 확인', false);
+  }
+}
+
+async function webcamLoop(){
+  try{
+    webcam.update();
+    await predict(webcam.canvas);
+    window.requestAnimationFrame(webcamLoop);
+  }catch(err){
+    console.error(err);
+    setStatus('실행 중 오류 발생', false);
+  }
+}
+
+async function predict(inputElement){
+  if(!model) return;
+  const prediction = await model.predict(inputElement);
+  for(let i=0;i<maxPredictions;i++){
+    const p = prediction[i];
+    labelContainer.childNodes[i].innerHTML = `${p.className}: ${p.probability.toFixed(2)}`;
+  }
+}
+
+// 이미지 업로드 처리
+document.getElementById('imgFile').addEventListener('change', async (e)=>{
+  const file = e.target.files[0];
+  if(!file) return;
+  try{
+    await ensureTmImageLoaded();
+    await loadModelIfNeeded();
+
+    // 라벨 초기화
+    labelContainer.innerHTML = '';
+    for(let i=0;i<maxPredictions;i++) labelContainer.appendChild(document.createElement('div'));
+
+    const img = document.getElementById('preview-img');
+    img.src = URL.createObjectURL(file);
+    img.style.display = 'block';
+    document.getElementById('webcam-container').innerHTML = '';
+    setStatus('업로드 이미지 예측 중...', true);
+
+    img.onload = async () => {
+      await predict(img);
+      setStatus('이미지 예측 완료', false);
+    };
+  }catch(err){
+    console.error(err);
+    setStatus('이미지 예측 실패 — 콘솔 확인', false);
+  }
+});
+
+// 버튼 핸들링
+document.getElementById('btn-start').addEventListener('click', async ()=>{
+  // 만약 이미 webcam이 실행중이면 중지하고 다시 시작하게 할 수도 있음
+  startWebcam();
+});
+document.getElementById('btn-upload').addEventListener('click', ()=> document.getElementById('imgFile').click());
+
+/* 디버깅 팁:
+ - 브라우저 콘솔(F12)에서 오류 메시지 확인
+ - Network 탭에서 model.json, metadata.json, tf.min.js 파일 상태 확인
+ - Mixed Content: 페이지가 https인데 모델이 http이면 차단됨
+ - getUserMedia 에러: "NotAllowedError" (권한 거부) 또는 "NotReadableError"
+*/
+setStatus('준비됨', false);
+</script>
+</body>
+</html>
