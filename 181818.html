@@ -1,0 +1,13 @@
+<script src="https://cdn.jsdelivr.net/npm/@teachablemachine/image@0.8/dist/teachablemachine-image.min.js"></script>
+<script>
+const URL = "teachableModel/";
+let model, maxPredictions;
+
+async function init() {
+    model = await tmImage.load(URL + "model.json", URL + "metadata.json");
+    maxPredictions = model.getTotalClasses();
+    document.getElementById("status").innerText = "모델 로드 완료";
+}
+
+init();
+</script>
