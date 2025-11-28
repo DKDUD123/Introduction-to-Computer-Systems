@@ -1,7 +1,7 @@
 let model, webcam, maxPredictions;
 
 async function init() {
-    const modelURL = 'model/model.json';
+    const modelURL = 'teachableModel/model.json';
     const metadataURL = 'model/metadata.json';
     model = await tmImage.load(modelURL, metadataURL); // 모델 로드
     maxPredictions = model.getTotalClasses();
@@ -33,3 +33,4 @@ async function predict() {
 
 // 초기화 실행
 init();
+
