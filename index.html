@@ -1,13 +1,43 @@
-<script src="https://cdn.jsdelivr.net/npm/@teachablemachine/image@0.8/dist/teachablemachine-image.min.js"></script>
-<script>
-const URL = "teachableModel/";
-let model, maxPredictions;
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
 
-async function init() {
-    model = await tmImage.load(URL + "model.json", URL + "metadata.json");
-    maxPredictions = model.getTotalClasses();
-    document.getElementById("status").innerText = "모델 로드 완료";
-}
+  <!-- 여기에 넣어야 함 -->
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@teachablemachine/image"></script>
+</head>
 
-init();
-</script>
+<body>
+   <!-- 웹캠 화면 -->
+   <div id="webcam-container"></div>
+   <div id="label-container"></div>
+
+   <script>
+       const URL = "teachableModel/";  // 너가 만든 폴더 이름 그대로
+
+       async function init() {
+           const modelURL = URL + "model.json";
+           const metadataURL = URL + "metadata.json";
+
+           const model = await tmImage.load(modelURL, metadataURL);
+           const webcam = new tmImage.Webcam(200, 200, true);
+           await webcam.setup();
+           await webcam.play();
+           window.requestAnimationFrame(loop);
+
+           document.getElementById("webcam-container").appendChild(webcam.canvas);
+           labelContainer = document.getElementById("label-container");
+       }
+
+       async function loop() {
+           webcam.update();
+           window.requestAnimationFrame(loop);
+           const prediction = await model.predict(webcam.canvas);
+           labelContainer.innerHTML = prediction[0].className + " : " + prediction[0].probability.toFixed(2);
+       }
+
+       init();
+   </script>
+</body>
+</html>
