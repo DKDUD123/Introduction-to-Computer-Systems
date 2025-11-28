@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <title>이미지 도감 - Teachable Machine</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      text-align: center;
+      background: #f3f7ff;
+      padding: 30px;
+    }
+    h1 { color: #333; }
+    #preview {
+      margin-top: 20px;
+      max-width: 300px;
+      border-radius: 15px;
+      box-shadow: 0 0 10px rgba(0,0,0,0.1);
+    }
+    #result {
+      margin-top: 25px;
+      font-size: 20px;
+      font-weight: bold;
+      color: #333;
+    }
+    .card {
+      background: white;
+      padding: 20px;
+      width: 350px;
+      margin: 0 auto;
+      border-radius: 20px;
+      box-shadow: 0 0 10px rgba(0,0,0,0.15);
+    }
+    input {
+      margin-top: 20px;
+    }
+  </style>
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@3.9.0"></script>
+</head>
+
+<body>
+  <h1>이미지 도감</h1>
+  <div class="card">
+    <p>사진을 업로드하면 자동으로 분류됩니다.</p>
+    <input type="file" accept="image/*" onchange="loadImage(event)">
+    <img id="preview" src="" alt="">
+    <div id="result"></div>
+  </div>
+
+  <script>
+    let model;
+    const URL = "./";
+
+    async function loadModel() {
+      model = await tmImage.load(URL + "model.json", URL + "metadata.json");
+      console.log("모델 로드 완료!");
+    }
+    loadModel();
+
+    function loadImage(event) {
+      const img = document.getElementById("preview");
+      img.src = URL.createObjectURL(event.target.files[0]);
+
+      img.onload = function() {
+        predict(img);
+      };
+    }
+
+    async function predict(image) {
+      const prediction = await model.predict(image);
+
+      prediction.sort((a, b) => b.probability - a.probability);
+
+      document.getElementById("result").innerText =
+        "결과: " + prediction[0].className +
+        " (" + (prediction[0].probability * 100).toFixed(1) + "%)";
+    }
+  </script>
+</body>
+</html>
