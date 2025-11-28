@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <title>Teachable Machine</title>
+  <style>
+    body { font-family: Arial; text-align: center; padding: 20px; }
+    video { width: 280px; border-radius: 10px; }
+    #label { font-size: 22px; margin-top: 12px; }
+  </style>
+
+  <!-- TensorFlow.js -->
+
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@3.9.0"></script>
+
+  <!-- Teachable Machine 라이브러리 -->
+
+  <script src="https://cdn.jsdelivr.net/npm/@teachablemachine/image@0.8/dist/teachablemachine-image.min.js"></script>
+
+</head>
+
+<body>
+  <h2> 실시간 분석</h2>
+
+<video id="webcam" autoplay playsinline></video>
+
+  <div id="label">불러오는 중...</div>
+
+  <script>
+    const URL = "./model/"; // model.json 위치
+    let model, webcam;
+
+    async function init() {
+      model = await tmImage.load(URL + "model.json", URL + "metadata.json");
+
+      webcam = new tmImage.Webcam(280, 210, true);  // width, height, flip
+      await webcam.setup({ facingMode: "user" });   // 웹캠 요청
+      await webcam.play();
+
+      document.getElementById("webcam").srcObject = webcam.webcam.stream;
+
+      window.requestAnimationFrame(loop);
+      document.getElementById("label").innerText = "웹캠 준비됨!";
+    }
+
+    async function loop() {
+      webcam.update();
+      await predict();
+      window.requestAnimationFrame(loop);
+    }
+
+    async function predict() {
+      const predictions = await model.predict(webcam.canvas);
+
+      // 가장 확률 높은 클래스 찾기
+      let top = predictions[0];
+      for (let p of predictions) if (p.probability > top.probability) top = p;
+
+      document.getElementById("label").innerText =
+        `${top.className} (${(top.probability * 100).toFixed(1)}%)`;
+    }
+
+    init();
+  </script>
+
+</body>
+</html>
