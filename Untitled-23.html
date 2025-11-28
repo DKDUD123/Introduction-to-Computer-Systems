@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Teachable Machine</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      background: #f3f7ff;
+      text-align: center;
+      padding: 20px;
+    }
+    h1 { color: #333; }
+    video {
+      width: 200px;
+      height: 200px;
+      border-radius: 10px;
+      margin-top: 15px;
+      box-shadow: 0 0 10px rgba(0,0,0,0.15);
+    }
+    button {
+      padding: 10px 20px;
+      margin: 15px;
+      border: none;
+      border-radius: 10px;
+      background: #4a6cff;
+      color: white;
+      font-size: 16px;
+      cursor: pointer;
+    }
+    #result { margin-top: 20px; font-size: 20px; font-weight: bold; }
+  </style>
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@3.21.0"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@teachablemachine/image@0.8/dist/teachablemachine-image.min.js"></script>
+</head>
+<body>
+
+<h1>Teachable Machine</h1>
+
+<button onclick="startWebcam()">📸 Start Webcam</button>
+
+<video id="webcam" autoplay playsinline></video>
+<div id="result">Model loading...</div>
+
+<script>
+  let model;
+  const modelURL = "model.json";
+  const metadataURL = "metadata.json";
+  let webcam;
+
+  const webcamElement = document.getElementById("webcam");
+  const resultBox = document.getElementById("result");
+
+  // 모델 로딩
+  async function loadModel() {
+    if (!model) {
+      model = await tmImage.load(modelURL, metadataURL);
+      resultBox.innerText = "Model loaded!";
+    }
+  }
+
+  // 웹캠 시작
+  async function startWebcam() {
+    await loadModel();
+
+    if (webcam) webcam.stop();
+    webcam = new tmImage.Webcam(128, 128, true); // 128x128로 최적화
+    await webcam.setup();
+    await webcam.play();
+    webcamElement.srcObject = webcam.stream;
+
+    requestAnimationFrame(loop);
+  }
+
+  // 웹캠 루프
+  async function loop() {
+    if (!webcam) return;
+    webcam.update();
+    await predict(webcam.canvas);
+    requestAnimationFrame(loop);
+  }
+
+  // 예측
+  async function predict(input) {
+    if (!model) return;
+    const prediction = await model.predict(input);
+    prediction.sort((a,b) => b.probability - a.probability);
+    const top = prediction[0];
+    resultBox.innerText = `Result: ${top.className} (${(top.probability*100).toFixed(1)}%)`;
+  }
+</script>
+
+</body>
+</html>
