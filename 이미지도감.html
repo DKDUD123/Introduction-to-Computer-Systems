@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8" />
+<title>AI 객체 인식 (리모컨 / 버즈 / 보조배터리)</title>
+
+<!-- 깔끔하고 심플한 스타일 추가 -->
+<style>
+    body {
+        background: #f0f4ff;
+        font-family: "Pretendard", sans-serif;
+        text-align: center;
+        padding: 30px;
+    }
+
+    h1 {
+        font-size: 32px;
+        color: #2b3a55;
+        margin-bottom: 10px;
+        font-weight: 700;
+    }
+
+    #container {
+        width: 420px;
+        margin: 0 auto;
+        background: white;
+        padding: 25px;
+        border-radius: 18px;
+        box-shadow: 0 6px 20px rgba(0,0,0,0.1);
+    }
+
+    button {
+        background: #5b72f2;
+        color: white;
+        padding: 12px 20px;
+        border: none;
+        border-radius: 10px;
+        font-size: 16px;
+        margin: 8px;
+        cursor: pointer;
+        transition: 0.2s;
+    }
+
+    button:hover {
+        background: #3a4bc7;
+    }
+
+    #webcam-container, #upload-image {
+        margin-top: 20px;
+    }
+
+    #label-container div {
+        font-size: 18px;
+        background: #eef1ff;
+        margin: 6px;
+        padding: 10px;
+        border-radius: 8px;
+        font-weight: 600;
+    }
+
+    #preview-img {
+        width: 250px;
+        margin-top: 20px;
+        border-radius: 10px;
+        display: none;
+    }
+</style>
+</head>
+
+<body>
+    <h1>AI 객체 인식 (리모컨 / 버즈 / 보조배터리)</h1>
+
+    <div id="container">
+        <div>
+            <button onclick="init()">📸 웹캠으로 시작</button>
+            <button onclick="document.getElementById('imgFile').click()">🖼 이미지 업로드</button>
+        </div>
+
+        <input type="file" id="imgFile" accept="image/*" style="display:none" onchange="loadImage(event)">
+
+        <div id="webcam-container"></div>
+        <img id="preview-img">
+        <div id="label-container"></div>
+    </div>
+
+    <!-- Teachable Machine 스크립트 -->
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@latest/dist/tf.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@teachablemachine/image@latest/dist/teachablemachine-image.min.js"></script>
+
+    <script>
+        const URL = "https://teachablemachine.withgoogle.com/models/YCegcUTGC/";
+        let model, webcam, labelContainer, maxPredictions;
+
+        async function init() {
+            const modelURL = URL + "model.json";
+            const metadataURL = URL + "metadata.json";
+
+            model = await tmImage.load(modelURL, metadataURL);
+            maxPredictions = model.getTotalClasses();
+
+            labelContainer = document.getElementById("label-container");
+            labelContainer.innerHTML = "";
+            for (let i = 0; i < maxPredictions; i++) {
+                labelContainer.appendChild(document.createElement("div"));
+            }
+
+            // 웹캠 셋업
+            const flip = true;
+            webcam = new tmImage.Webcam(300, 300, flip);
+            await webcam.setup();
+            await webcam.play();
+            window.requestAnimationFrame(loop);
+
+            document.getElementById("webcam-container").innerHTML = "";
+            document.getElementById("webcam-container").appendChild(webcam.canvas);
+
+            document.getElementById("preview-img").style.display = "none";
+        }
+
+        async function loop() {
+            webcam.update();
+            await predict(webcam.canvas);
+            window.requestAnimationFrame(loop);
+        }
+
+        async function predict(input) {
+            if (!model) return;
+
+            const prediction = await model.predict(input);
+            for (let i = 0; i < maxPredictions; i++) {
+                const classPrediction =
+                    prediction[i].className + ": " + prediction[i].probability.toFixed(2);
+                labelContainer.childNodes[i].innerHTML = classPrediction;
+            }
+        }
+
+        // --------------------
+        // 이미지 업로드 기능
+        // --------------------
+        async function loadImage(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            const img = document.getElementById("preview-img");
+            img.src = URL.createObjectURL(file);
+            img.style.display = "block";
+
+            if (!model) {
+                const modelURL = URL + "model.json";
+                const metadataURL = URL + "metadata.json";
+                model = await tmImage.load(modelURL, metadataURL);
+                maxPredictions = model.getTotalClasses();
+            }
+
+            labelContainer = document.getElementById("label-container");
+            labelContainer.innerHTML = "";
+            for (let i = 0; i < maxPredictions; i++) {
+                labelContainer.appendChild(document.createElement("div"));
+            }
+
+            img.onload = async () => {
+                await predict(img);
+            };
+
+            // 웹캠 영역 비우기
+            document.getElementById("webcam-container").innerHTML = "";
+        }
+    </script>
+</body>
+</html>
